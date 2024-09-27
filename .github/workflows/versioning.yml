@@ -1,0 +1,46 @@
+name: Semantic Versioning
+
+on:
+  push:
+    branches:
+      - main # Trigger the workflow on a push to the main branch
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Setup .NET Core SDK
+        uses: actions/setup-dotnet@v1
+        with:
+          dotnet-version: '8.x' # Adjust to your .NET version
+
+      - name: Install Node.js (needed for standard-version)
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install standard-version
+        run: npm install -g standard-version
+
+      - name: Bump version and create Git tag
+        run: standard-version
+
+      - name: Update .csproj files with new version
+        run: |
+          VERSION=$(git describe --tags --abbrev=0 | cut -c2-)
+          echo "Updating version to $VERSION"
+          find . -name '*.csproj' -exec sed -i "s/<Version>.*<\/Version>/<Version>$VERSION<\/Version>/g" {} +
+
+      - name: Commit updated .csproj files
+        run: |
+          git config --local user.name "GitHub Actions"
+          git config --local user.email "actions@github.com"
+          git add ./*.csproj
+          git commit -m "chore: update .csproj files to version $VERSION"
+
+      - name: Push changes
+        run: |
+          git push --follow-tags
