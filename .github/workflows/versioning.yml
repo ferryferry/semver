@@ -25,13 +25,13 @@ jobs:
       - name: Install standard-version
         run: npm install -g standard-version
 
-      - name: Bump version and create Git tag
-        run: standard-version
-
       - name: Set Git user details
         run: |
           git config --local user.name "GitHub Actions"
           git config --local user.email "actions@github.com"
+
+      - name: Bump version and create Git tag
+        run: standard-version
 
       - name: Update .csproj files with new version
         run: |
