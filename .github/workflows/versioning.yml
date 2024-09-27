@@ -33,7 +33,7 @@ jobs:
       - name: Load current version from .csproj
         id: load_version
         run: |
-          CSPROJ_FILE="api/your-api.csproj"
+          CSPROJ_FILE="Api/Api.csproj"
           VERSION=$(grep -oP '(?<=<Version>)[^<]+' $CSPROJ_FILE)
           echo "Current version: $VERSION"
           echo "::set-output name=version::$VERSION"
@@ -55,7 +55,7 @@ jobs:
 
       - name: Update .csproj with new version
         run: |
-          CSPROJ_FILE="api/your-api.csproj"
+          CSPROJ_FILE="Api/Api.csproj"
           NEW_VERSION=${{ steps.increment_version.outputs.new_version }}
           sed -i "s/<Version>.*<\/Version>/<Version>$NEW_VERSION<\/Version>/" $CSPROJ_FILE
 
