@@ -1,51 +1,68 @@
-name: Semantic Versioning
+name: API Versioning
 
 on:
   push:
-    branches:
-      - main # Trigger the workflow on a push to the main branch
+    paths:
+      - 'Api/**' # Only trigger on changes in the api directory
 
 jobs:
-  bump-version:
+  version-api:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
 
-      - name: Setup .NET Core SDK
+      - name: Setup .NET Core SDK (using .NET 8)
         uses: actions/setup-dotnet@v1
         with:
-          dotnet-version: '8.x' # Adjust to your .NET version
+          dotnet-version: '8.0.x' # .NET 8
 
-      - name: Install Node.js (needed for standard-version)
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
+      - name: Determine version bump type based on commit messages
+        id: version_bump
+        run: |
+          LAST_COMMIT_MSG=$(git log -1 --pretty=%B)
+          echo "Last commit message: $LAST_COMMIT_MSG"
+          if [[ "$LAST_COMMIT_MSG" == *"feat"* ]]; then
+            echo "::set-output name=bump_type::minor"
+          elif [[ "$LAST_COMMIT_MSG" == *"BREAKING CHANGE"* ]]; then
+            echo "::set-output name=bump_type::major"
+          else
+            echo "::set-output name=bump_type::patch"  # Default to patch if no feat or BREAKING CHANGE
+          fi
 
-      - name: Install standard-version
-        run: npm install -g standard-version
+      - name: Load current version from .csproj
+        id: load_version
+        run: |
+          CSPROJ_FILE="api/your-api.csproj"
+          VERSION=$(grep -oP '(?<=<Version>)[^<]+' $CSPROJ_FILE)
+          echo "Current version: $VERSION"
+          echo "::set-output name=version::$VERSION"
 
-      - name: Set Git user details
+      - name: Increment version based on bump type
+        id: increment_version
+        run: |
+          OLD_VERSION=${{ steps.load_version.outputs.version }}
+          IFS='.' read -r major minor patch <<< "$OLD_VERSION"
+          if [ "${{ steps.version_bump.outputs.bump_type }}" = "patch" ]; then
+            NEW_VERSION="$major.$minor.$((patch+1))"
+          elif [ "${{ steps.version_bump.outputs.bump_type }}" = "minor" ]; then
+            NEW_VERSION="$major.$((minor+1)).0"
+          elif [ "${{ steps.version_bump.outputs.bump_type }}" = "major" ]; then
+            NEW_VERSION="$((major+1)).0.0"
+          fi
+          echo "New version: $NEW_VERSION"
+          echo "::set-output name=new_version::$NEW_VERSION"
+
+      - name: Update .csproj with new version
+        run: |
+          CSPROJ_FILE="api/your-api.csproj"
+          NEW_VERSION=${{ steps.increment_version.outputs.new_version }}
+          sed -i "s/<Version>.*<\/Version>/<Version>$NEW_VERSION<\/Version>/" $CSPROJ_FILE
+
+      - name: Commit and push updated .csproj file
         run: |
           git config --local user.name "GitHub Actions"
           git config --local user.email "actions@github.com"
-
-      - name: Bump version and create Git tag
-        run: standard-version
-
-      - name: Update .csproj files with new version
-        run: |
-          VERSION=$(git describe --tags --abbrev=0 | cut -c2-)
-          echo "Updating version to $VERSION"
-          find . -name '*.csproj' -exec sed -i "s/<Version>.*<\/Version>/<Version>$VERSION<\/Version>/g" {} +
-
-      - name: Commit updated .csproj files
-        run: |
-          git add ./*.csproj
-          git commit -m "chore: update .csproj files to version $VERSION"
-
-      - name: Push changes with GITHUB_TOKEN
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Use the automatically provided GITHUB_TOKEN
-        run: |
-          git push --follow-tags
+          git add .
+          git commit -m "chore: bump API version to ${{ steps.increment_version.outputs.new_version }}"
+          git push
